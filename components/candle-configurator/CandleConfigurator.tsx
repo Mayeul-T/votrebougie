@@ -61,11 +61,9 @@ function ConfiguratorContent() {
         <CandleViewer
           radiusMm={template.candle.radiusMm}
           heightMm={template.candle.heightMm}
-          cupHeightMm={template.cup.heightMm}
-          cupFootMm={template.cup.footMm}
-          cupThicknessMm={template.cup.thicknessMm}
-          cupColor={template.cup.color}
-          cupOpacity={template.cup.opacity}
+          waxColor={template.candle.color}
+          waxEdgeRadiusMm={template.candle.edgeRadiusMm}
+          cup={template.cup ?? undefined}
           label={
             labelDataUrl
               ? { imageUrl: labelDataUrl, heightMm: template.label.heightMm }

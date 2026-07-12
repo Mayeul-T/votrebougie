@@ -7,26 +7,62 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 /** Échelle de la scène : 1 unité three.js = 50 mm. */
 const MM = 1 / 50;
 
+/**
+ * Profil (demi-coupe, pour LatheGeometry) d'un cylindre aux arêtes
+ * arrondies : fond plat, quart de cercle, flanc, quart de cercle, dessus
+ * plat. Les raccords sont tangents, le lissage des normales est donc juste.
+ */
+function roundedCylinderProfile(
+  r: number,
+  h: number,
+  edge: number,
+): THREE.Vector2[] {
+  const points: THREE.Vector2[] = [new THREE.Vector2(0, -h / 2)];
+  const arc = (cy: number, from: number, to: number) => {
+    const STEPS = 10;
+    for (let i = 0; i <= STEPS; i++) {
+      const a = from + ((to - from) * i) / STEPS;
+      points.push(
+        new THREE.Vector2(
+          r - edge + edge * Math.cos(a),
+          cy + edge * Math.sin(a),
+        ),
+      );
+    }
+  };
+  arc(-h / 2 + edge, -Math.PI / 2, 0); // arête basse
+  arc(h / 2 - edge, 0, Math.PI / 2); // arête haute
+  points.push(new THREE.Vector2(0, h / 2));
+  return points;
+}
+
 export type CandleViewerProps = {
   /** Rayon de la bougie (cire) en mm. */
   radiusMm: number;
   /** Hauteur de la bougie (cire) en mm. */
   heightMm: number;
-  /** Hauteur totale du godet depuis le sol, pied compris, en mm. */
-  cupHeightMm: number;
-  /** Hauteur du pied du godet (fond surélevé d'autant), en mm. 0 = posé au sol. */
-  cupFootMm: number;
-  /** Épaisseur du plastique du godet, en mm. */
-  cupThicknessMm: number;
-  /** Couleur du plastique, hex CSS. */
-  cupColor: string;
-  /** Opacité du plastique : 0 invisible → 1 opaque. */
-  cupOpacity: number;
-  /** Image imprimée sur le godet. */
+  /** Couleur de la cire, hex CSS. */
+  waxColor: string;
+  /** Rayon d'arrondi des arêtes de la cire, en mm (défaut : 0, arêtes vives). */
+  waxEdgeRadiusMm?: number;
+  /** Godet plastique ; absent = impression directement sur la cire. */
+  cup?: {
+    /** Hauteur totale depuis le sol, pied compris, en mm. */
+    heightMm: number;
+    /** Hauteur du pied (fond surélevé d'autant), en mm. 0 = posé au sol. */
+    footMm: number;
+    /** Épaisseur du plastique, en mm. */
+    thicknessMm: number;
+    /** Couleur du plastique, hex CSS. */
+    color: string;
+    /** Opacité du plastique : 0 invisible → 1 opaque. */
+    opacity: number;
+  };
+  /** Image imprimée sur le godet (ou sur la cire s'il n'y a pas de godet). */
   label?: {
     /** URL de l'image (le ratio est préservé sur la surface). */
     imageUrl: string;
-    /** Hauteur imprimée en mm ; toujours centrée en hauteur sur le godet. */
+    /** Hauteur imprimée en mm ; toujours centrée en hauteur sur le support. */
     heightMm: number;
   };
   /** Flamme animée (spritesheet horizontale). */
@@ -47,19 +83,18 @@ export type CandleViewerProps = {
 type CandleWorld = {
   scene: THREE.Scene;
   renderer: THREE.WebGLRenderer;
-  cupR: number;
-  /** Centre vertical du godet, où l'étiquette est centrée. */
+  /** Rayon du support de l'étiquette (godet, ou cire sans godet). */
+  labelR: number;
+  /** Centre vertical du support, où l'étiquette est centrée. */
   labelY: number;
 };
 
 export default function CandleViewer({
   radiusMm,
   heightMm,
-  cupHeightMm,
-  cupFootMm,
-  cupThicknessMm,
-  cupColor,
-  cupOpacity,
+  waxColor,
+  waxEdgeRadiusMm = 0,
+  cup,
   label,
   flame,
   className,
@@ -76,6 +111,14 @@ export default function CandleViewer({
 
   const labelImageUrl = label?.imageUrl;
   const labelHeightMm = label?.heightMm ?? 0;
+  // Le godet est éclaté en scalaires : l'effet scène dépend de valeurs
+  // stables, pas de l'identité de l'objet `cup`.
+  const hasCup = cup !== undefined;
+  const cupHeightMm = cup?.heightMm ?? 0;
+  const cupFootMm = cup?.footMm ?? 0;
+  const cupThicknessMm = cup?.thicknessMm ?? 0;
+  const cupColor = cup?.color ?? "#ffffff";
+  const cupOpacity = cup?.opacity ?? 0;
   const flameSpriteUrl = flame?.spriteUrl ?? "/candle/flame-sprites.png";
   const flameFrames = flame?.frames ?? 20;
   const flameFps = flame?.fps ?? 12.5;
@@ -86,12 +129,13 @@ export default function CandleViewer({
     if (!container) return;
 
     // --- Dimensions en unités scène ---
-    // La cire reste centrée à l'origine ; le godet est construit autour
-    // d'elle. Sa paroi descend jusqu'au sol : le pied est le vide entre
-    // le sol et le fond surélevé.
+    // La cire reste centrée à l'origine ; le godet (s'il existe) est
+    // construit autour d'elle. Sa paroi descend jusqu'au sol : le pied est
+    // le vide entre le sol et le fond surélevé. Sans godet, T = 0 et
+    // l'étiquette se pose directement sur la cire.
     const R = radiusMm * MM;
     const H = heightMm * MM;
-    const T = cupThicknessMm * MM;
+    const T = hasCup ? cupThicknessMm * MM : 0;
     const CUP_R = R + T;
     const CUP_H = cupHeightMm * MM;
     const cupBotY = -H / 2 - T; // fond du godet, la cire repose dessus
@@ -130,10 +174,14 @@ export default function CandleViewer({
     camera.add(fill, fill.target);
 
     // --- La cire ---
+    // Arrondi borné : jamais plus que le rayon ni la demi-hauteur.
+    const EDGE_R = Math.min(waxEdgeRadiusMm * MM, R, H / 2);
     const wax = new THREE.Mesh(
-      new THREE.CylinderGeometry(R, R, H, 96),
+      EDGE_R > 0
+        ? new THREE.LatheGeometry(roundedCylinderProfile(R, H, EDGE_R), 96)
+        : new THREE.CylinderGeometry(R, R, H, 96),
       new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
+        color: new THREE.Color(waxColor),
         roughness: 0.55,
         clearcoat: 0.4,
         clearcoatRoughness: 0.4,
@@ -141,35 +189,37 @@ export default function CandleViewer({
     );
     scene.add(wax);
 
-    // --- Le godet translucide collé à la cire ---
-    const plastic = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color(cupColor),
-      roughness: 0.35,
-      clearcoat: 0.6,
-      clearcoatRoughness: 0.3,
-      transparent: true,
-      opacity: cupOpacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    const cup = new THREE.Mesh(
-      new THREE.CylinderGeometry(CUP_R, CUP_R, CUP_H, 96, 1, true),
-      plastic,
-    );
-    cup.position.y = groundY + CUP_H / 2;
-    const cupBottom = new THREE.Mesh(
-      new THREE.CircleGeometry(CUP_R, 96),
-      plastic,
-    );
-    cupBottom.rotation.x = -Math.PI / 2;
-    cupBottom.position.y = cupBotY;
-    const cupLip = new THREE.Mesh(
-      new THREE.TorusGeometry(CUP_R, 0.016, 12, 96),
-      plastic,
-    );
-    cupLip.rotation.x = Math.PI / 2;
-    cupLip.position.y = cupTopY;
-    scene.add(cup, cupBottom, cupLip);
+    // --- Le godet translucide collé à la cire (optionnel) ---
+    if (hasCup) {
+      const plastic = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(cupColor),
+        roughness: 0.35,
+        clearcoat: 0.6,
+        clearcoatRoughness: 0.3,
+        transparent: true,
+        opacity: cupOpacity,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const cupWall = new THREE.Mesh(
+        new THREE.CylinderGeometry(CUP_R, CUP_R, CUP_H, 96, 1, true),
+        plastic,
+      );
+      cupWall.position.y = groundY + CUP_H / 2;
+      const cupBottom = new THREE.Mesh(
+        new THREE.CircleGeometry(CUP_R, 96),
+        plastic,
+      );
+      cupBottom.rotation.x = -Math.PI / 2;
+      cupBottom.position.y = cupBotY;
+      const cupLip = new THREE.Mesh(
+        new THREE.TorusGeometry(CUP_R, 0.016, 12, 96),
+        plastic,
+      );
+      cupLip.rotation.x = Math.PI / 2;
+      cupLip.position.y = cupTopY;
+      scene.add(cupWall, cupBottom, cupLip);
+    }
 
     // --- La mèche : tube brun courbé, bout incandescent ---
     const wickCurve = new THREE.CubicBezierCurve3(
@@ -258,8 +308,9 @@ export default function CandleViewer({
     worldRef.current = {
       scene,
       renderer,
-      cupR: CUP_R,
-      labelY: groundY + CUP_H / 2,
+      labelR: CUP_R,
+      // Centrée sur le godet s'il existe, sinon sur la cire.
+      labelY: hasCup ? groundY + CUP_H / 2 : 0,
     };
     setSceneRevision((r) => r + 1);
 
@@ -292,6 +343,9 @@ export default function CandleViewer({
   }, [
     radiusMm,
     heightMm,
+    waxColor,
+    waxEdgeRadiusMm,
+    hasCup,
     cupHeightMm,
     cupFootMm,
     cupThicknessMm,
@@ -335,7 +389,7 @@ export default function CandleViewer({
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = world.renderer.capabilities.getMaxAnisotropy();
       const LABEL_H = labelHeightMm * MM;
-      const rLabel = world.cupR + 0.004;
+      const rLabel = world.labelR + 0.004;
       const aspect = tex.image.width / tex.image.height;
       const thetaLength = Math.min((aspect * LABEL_H) / rLabel, Math.PI * 2);
       const mesh = new THREE.Mesh(

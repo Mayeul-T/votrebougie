@@ -12,7 +12,12 @@ export type CandleTemplate = {
   candle: {
     radiusMm: number;
     heightMm: number;
+    /** Couleur de la cire, hex CSS. */
+    color: string;
+    /** Rayon d'arrondi des arêtes de la cire, en mm (surtout utile sans godet). */
+    edgeRadiusMm?: number;
   };
+  /** null : pas de godet, l'étiquette est imprimée directement sur la cire. */
   cup: {
     /** Hauteur totale du godet depuis le sol, pied compris. */
     heightMm: number;
@@ -24,10 +29,10 @@ export type CandleTemplate = {
     color: string;
     /** Opacité du plastique : 0 invisible → 1 opaque. */
     opacity: number;
-  };
+  } | null;
   label: {
     widthMm: number;
-    /** L'étiquette est toujours centrée en hauteur sur le godet. */
+    /** L'étiquette est toujours centrée en hauteur sur le godet (ou la cire). */
     heightMm: number;
   };
 };
@@ -36,7 +41,7 @@ export const CANDLE_TEMPLATES: CandleTemplate[] = [
   {
     id: "veilleuse-classique",
     name: "Veilleuse classique",
-    candle: { radiusMm: 50, heightMm: 125 },
+    candle: { radiusMm: 50, heightMm: 125, color: "#ffffff" },
     cup: {
       heightMm: 140,
       footMm: 5,
@@ -47,30 +52,24 @@ export const CANDLE_TEMPLATES: CandleTemplate[] = [
     label: { widthMm: 200, heightMm: 70 },
   },
   {
-    id: "veilleuse-petite",
-    name: "Petite veilleuse",
-    candle: { radiusMm: 40, heightMm: 90 },
+    id: "veilleuse-godet-rouge",
+    name: "Veilleuse godet rouge",
+    candle: { radiusMm: 50, heightMm: 125, color: "#ffffff" },
     cup: {
-      heightMm: 102,
-      footMm: 4,
+      heightMm: 140,
+      footMm: 5,
       thicknessMm: 1,
-      color: "#ffffff",
-      opacity: 0.35,
+      color: "#b3312e",
+      opacity: 0.9,
     },
-    label: { widthMm: 160, heightMm: 50 },
+    label: { widthMm: 200, heightMm: 70 },
   },
   {
-    id: "veilleuse-grande-ambree",
-    name: "Grande veilleuse ambrée",
-    candle: { radiusMm: 60, heightMm: 150 },
-    cup: {
-      heightMm: 168,
-      footMm: 6,
-      thicknessMm: 1.2,
-      color: "#e8b06a",
-      opacity: 0.45,
-    },
-    label: { widthMm: 240, heightMm: 80 },
+    id: "pilier-ambre",
+    name: "Pilier ambré sans godet",
+    candle: { radiusMm: 40, heightMm: 140, color: "#f4d8b5", edgeRadiusMm: 8 },
+    cup: null,
+    label: { widthMm: 200, heightMm: 60 },
   },
 ];
 
