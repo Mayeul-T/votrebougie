@@ -324,7 +324,13 @@ export default function CandleViewer({
           -thetaLength / 2,
           thetaLength,
         ),
-        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }),
+        // L'étiquette imprimée est transparente : seuls les éléments
+        // dessinés apparaissent, le godet reste visible derrière.
+        new THREE.MeshStandardMaterial({
+          map: tex,
+          roughness: 0.6,
+          transparent: true,
+        }),
       );
       mesh.position.y = labelOffsetYCm * CM;
       // L'ancienne étiquette reste affichée jusqu'à ce que la nouvelle soit

@@ -40,9 +40,7 @@ export default function useAlignmentGuides({
   const getOtherRects = useCallback(
     (layer: Konva.Layer, node: Konva.Node): Rect[] =>
       layer
-        .getChildren(
-          (child) => child !== node && child.name() !== "label-background",
-        )
+        .getChildren((child) => child !== node)
         .map((child) => child.getClientRect({ relativeTo: layer })),
     [],
   );

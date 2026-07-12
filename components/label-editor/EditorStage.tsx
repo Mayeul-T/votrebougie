@@ -82,20 +82,23 @@ export default function EditorStage({
       onMouseDown={deselectOnEmpty}
       onTouchStart={deselectOnEmpty}
     >
-      <Layer
-        ref={contentLayerRef}
-        onDragMove={alignmentGuides.onDragMove}
-        onDragEnd={alignmentGuides.clearGuides}
-      >
+      {/* Fond blanc de travail : visible dans l'éditeur seulement.
+          L'étiquette imprimée est transparente, donc la couche exportée
+          (contentLayerRef) ne contient que les éléments. */}
+      <Layer listening={false}>
         <Rect
           x={0}
           y={0}
           width={baseWidth}
           height={baseHeight}
           fill="#ffffff"
-          listening={false}
-          name="label-background"
         />
+      </Layer>
+      <Layer
+        ref={contentLayerRef}
+        onDragMove={alignmentGuides.onDragMove}
+        onDragEnd={alignmentGuides.clearGuides}
+      >
         {elements.map((el) =>
           el.type === "image" ? (
             <LabelImage
