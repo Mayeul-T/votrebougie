@@ -1,5 +1,5 @@
 import type Konva from "konva";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import EditorStage from "./EditorStage";
 import EditorToolbox from "./EditorToolbox";
 import useDebouncedExport from "./hooks/useDebouncedExport";
@@ -10,16 +10,18 @@ import TextEditOverlay from "./TextEditOverlay";
 import TextToolbox from "./TextToolbox";
 import type { TextElement } from "./types";
 
-/** Résolution de travail de l'éditeur : 1 cm d'étiquette = 30 px de base. */
-const PX_PER_CM = 30;
+/** Résolution de travail de l'éditeur : 1 mm d'étiquette = 3 px de base. */
+const PX_PER_MM = 3;
 
 export type LabelEditorProps = {
-  /** Largeur physique de l'étiquette en cm. */
-  widthCm: number;
-  /** Hauteur physique de l'étiquette en cm. */
-  heightCm: number;
+  /** Largeur physique de l'étiquette en mm. */
+  widthMm: number;
+  /** Hauteur physique de l'étiquette en mm. */
+  heightMm: number;
   /** Reçoit la texture (dataURL PNG), débouncée à 500 ms. */
   onExport: (dataUrl: string) => void;
+  /** Signale si le document contient des éléments (pour avertir avant reset). */
+  onContentChange?: (hasContent: boolean) => void;
   className?: string;
 };
 
@@ -28,13 +30,14 @@ export type LabelEditorProps = {
  * (sélection, édition), et les sous-composants toolbox / stage / overlay.
  */
 export default function LabelEditor({
-  widthCm,
-  heightCm,
+  widthMm,
+  heightMm,
   onExport,
+  onContentChange,
   className,
 }: LabelEditorProps) {
-  const baseWidth = widthCm * PX_PER_CM;
-  const baseHeight = heightCm * PX_PER_CM;
+  const baseWidth = widthMm * PX_PER_MM;
+  const baseHeight = heightMm * PX_PER_MM;
 
   // --- État UI, volontairement hors du document (futur historique undo) ---
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -70,6 +73,11 @@ export default function LabelEditor({
       return () => node.visible(false);
     },
   });
+
+  const hasContent = elements.length > 0;
+  useEffect(() => {
+    onContentChange?.(hasContent);
+  }, [hasContent, onContentChange]);
 
   const removeSelected = useCallback(() => {
     if (!selectedId || editingId) return;
@@ -174,7 +182,7 @@ export default function LabelEditor({
           </div>
         </div>
         <p className="pt-2 text-sm text-zinc-500 dark:text-zinc-400">
-          Étiquette {widthCm} × {heightCm} cm — double-cliquez un texte pour
+          Étiquette {widthMm} × {heightMm} mm — double-cliquez un texte pour
           l'éditer.
         </p>
       </div>
