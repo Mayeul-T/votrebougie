@@ -65,6 +65,20 @@ export const CANDLE_TEMPLATES: CandleTemplate[] = [
     label: { widthMm: 200, heightMm: 70 },
   },
   {
+    id: "veilleuse-godet-vert-pied",
+    name: "Veilleuse godet vert à pied",
+    candle: { radiusMm: 50, heightMm: 125, color: "#ffffff" },
+    cup: {
+      // Pied = 1/4 de la hauteur de la bougie (125 mm).
+      heightMm: 166,
+      footMm: 31,
+      thicknessMm: 1,
+      color: "#2e7d4f",
+      opacity: 0.45,
+    },
+    label: { widthMm: 200, heightMm: 70 },
+  },
+  {
     id: "pilier-ambre",
     name: "Pilier ambré sans godet",
     candle: { radiusMm: 40, heightMm: 140, color: "#f4d8b5", edgeRadiusMm: 8 },
