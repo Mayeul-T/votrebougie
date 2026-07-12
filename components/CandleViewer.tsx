@@ -405,12 +405,19 @@ export default function CandleViewer({
         ),
         // L'étiquette imprimée est transparente : seuls les éléments
         // dessinés apparaissent, le godet reste visible derrière.
+        // depthWrite désactivé : sinon ses pixels (même invisibles)
+        // masquent la paroi du godet dans les frames où le tri des
+        // transparents la dessine en premier — rectangle blanc à l'écran.
         new THREE.MeshStandardMaterial({
           map: tex,
           roughness: 0.6,
           transparent: true,
+          depthWrite: false,
         }),
       );
+      // Toujours après le godet : le tri par distance est instable entre
+      // deux cylindres quasi concentriques.
+      mesh.renderOrder = 1;
       mesh.position.y = world.labelY;
       // L'ancienne étiquette reste affichée jusqu'à ce que la nouvelle soit
       // prête : pas de clignotement pendant les mises à jour rapprochées.
