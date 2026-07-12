@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
@@ -39,6 +39,13 @@ export type CandleViewerProps = {
   className?: string;
 };
 
+/** Poignées sur la scène construite, pour les mises à jour ciblées (étiquette). */
+type CandleWorld = {
+  scene: THREE.Scene;
+  renderer: THREE.WebGLRenderer;
+  cupR: number;
+};
+
 export default function CandleViewer({
   radiusCm = 5,
   heightCm = 12.5,
@@ -49,6 +56,14 @@ export default function CandleViewer({
   className,
 }: CandleViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<CandleWorld | null>(null);
+  const labelMeshRef = useRef<THREE.Mesh<
+    THREE.CylinderGeometry,
+    THREE.MeshStandardMaterial
+  > | null>(null);
+  // Incrémenté à chaque (re)construction de la scène : l'effet étiquette
+  // doit repasser après un rebuild, que l'URL ait changé ou non.
+  const [sceneRevision, setSceneRevision] = useState(0);
 
   const labelImageUrl = label?.imageUrl;
   const labelHeightCm = label?.heightCm ?? 7;
@@ -68,8 +83,6 @@ export default function CandleViewer({
     const CUP_R = R + (cupThicknessMm / 10) * CM;
     const CUP_LIP = cupLipCm * CM;
     const CUP_H = H + CUP_LIP + (cupThicknessMm / 10) * CM;
-    const LABEL_H = labelHeightCm * CM;
-    const LABEL_Y = labelOffsetYCm * CM;
     const FLAME_H = flameHeightCm * CM;
     const FLAME_BASE_Y = H / 2 - 0.11 * FLAME_H; // la base mord un peu la cire
 
@@ -176,33 +189,6 @@ export default function CandleViewer({
     const loader = new THREE.TextureLoader();
     const disposables: { dispose(): void }[] = [];
 
-    // --- L'étiquette imprimée sur le godet ---
-    if (labelImageUrl) {
-      loader.load(labelImageUrl, (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        const rLabel = CUP_R + 0.004;
-        const aspect = tex.image.width / tex.image.height;
-        const thetaLength = Math.min((aspect * LABEL_H) / rLabel, Math.PI * 2);
-        const labelMesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(
-            rLabel,
-            rLabel,
-            LABEL_H,
-            128,
-            1,
-            true,
-            -thetaLength / 2,
-            thetaLength,
-          ),
-          new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }),
-        );
-        labelMesh.position.y = LABEL_Y;
-        scene.add(labelMesh);
-        disposables.push(tex, labelMesh.geometry, labelMesh.material);
-      });
-    }
-
     // --- La flamme animée ---
     let flameSprite: THREE.Sprite | null = null;
     if (FLAME_H > 0) {
@@ -256,7 +242,12 @@ export default function CandleViewer({
     const observer = new ResizeObserver(resize);
     observer.observe(container);
 
+    worldRef.current = { scene, renderer, cupR: CUP_R };
+    setSceneRevision((r) => r + 1);
+
     return () => {
+      worldRef.current = null;
+      labelMeshRef.current = null;
       observer.disconnect();
       renderer.setAnimationLoop(null);
       controls.dispose();
@@ -266,7 +257,10 @@ export default function CandleViewer({
           const mats = Array.isArray(obj.material)
             ? obj.material
             : [obj.material];
-          for (const m of mats) m.dispose();
+          for (const m of mats) {
+            if ("map" in m && m.map instanceof THREE.Texture) m.map.dispose();
+            m.dispose();
+          }
         }
       });
       for (const d of disposables) d.dispose();
@@ -278,14 +272,72 @@ export default function CandleViewer({
     heightCm,
     cupThicknessMm,
     cupLipCm,
-    labelImageUrl,
-    labelHeightCm,
-    labelOffsetYCm,
     flameSpriteUrl,
     flameFrames,
     flameFps,
     flameHeightCm,
   ]);
+
+  // --- L'étiquette imprimée sur le godet : mise à jour ciblée, sans
+  // reconstruire la scène ni réinitialiser la caméra ---
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sceneRevision force le repassage après chaque (re)construction de la scène
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!world) return;
+
+    const removeCurrent = () => {
+      const old = labelMeshRef.current;
+      if (!old) return;
+      world.scene.remove(old);
+      old.geometry.dispose();
+      old.material.map?.dispose();
+      old.material.dispose();
+      labelMeshRef.current = null;
+    };
+
+    if (!labelImageUrl) {
+      removeCurrent();
+      return;
+    }
+
+    let cancelled = false;
+    new THREE.TextureLoader().load(labelImageUrl, (tex) => {
+      // Un chargement dépassé par un plus récent (ou un démontage) est jeté.
+      if (cancelled || worldRef.current !== world) {
+        tex.dispose();
+        return;
+      }
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = world.renderer.capabilities.getMaxAnisotropy();
+      const LABEL_H = labelHeightCm * CM;
+      const rLabel = world.cupR + 0.004;
+      const aspect = tex.image.width / tex.image.height;
+      const thetaLength = Math.min((aspect * LABEL_H) / rLabel, Math.PI * 2);
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          rLabel,
+          rLabel,
+          LABEL_H,
+          128,
+          1,
+          true,
+          -thetaLength / 2,
+          thetaLength,
+        ),
+        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }),
+      );
+      mesh.position.y = labelOffsetYCm * CM;
+      // L'ancienne étiquette reste affichée jusqu'à ce que la nouvelle soit
+      // prête : pas de clignotement pendant les mises à jour rapprochées.
+      removeCurrent();
+      world.scene.add(mesh);
+      labelMeshRef.current = mesh;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [labelImageUrl, labelHeightCm, labelOffsetYCm, sceneRevision]);
 
   return <div ref={containerRef} className={className} />;
 }

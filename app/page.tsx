@@ -1,22 +1,19 @@
-import CandleViewer from "@/components/CandleViewer";
+import CandleConfigurator from "@/components/CandleConfigurator";
 
 export default function Home() {
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex w-full max-w-4xl flex-1 flex-col items-center gap-8 px-8 py-16">
+      <main className="flex w-full max-w-6xl flex-1 flex-col items-center gap-8 px-8 py-16">
         <header className="flex flex-col items-center gap-3 text-center">
           <h1 className="text-4xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
             VotreBougie
           </h1>
           <p className="max-w-md text-lg leading-7 text-zinc-600 dark:text-zinc-400">
-            Votre image, imprimée sur une veilleuse. Faites-la tourner pour la
-            découvrir sous tous les angles.
+            Composez votre étiquette, elle s'imprime en direct sur la veilleuse.
+            Faites-la tourner pour la découvrir sous tous les angles.
           </p>
         </header>
-        <CandleViewer
-          label={{ imageUrl: "/candle/label-sunset.png" }}
-          className="h-[32rem] w-full max-w-2xl"
-        />
+        <CandleConfigurator />
       </main>
     </div>
   );
