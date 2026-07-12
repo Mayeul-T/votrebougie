@@ -2,12 +2,13 @@
 
 import type Konva from "konva";
 import { useRef } from "react";
-import { LABEL_FONT_FAMILY, type TextElement } from "./types";
+import type { TextElement } from "./types";
 
 /**
  * Textarea superposé au texte Konva pendant l'édition (double-clic).
- * PoC : il approxime les métriques texte de Konva, une légère dérive
- * visuelle pendant la frappe est acceptée.
+ * Entrée insère un retour à la ligne (multiligne) ; un clic à l'extérieur
+ * (blur) valide ; Échap annule. PoC : le textarea approxime les métriques
+ * texte de Konva, une légère dérive pendant la frappe est acceptée.
  */
 export default function TextEditOverlay({
   element,
@@ -32,13 +33,15 @@ export default function TextEditOverlay({
       defaultValue={element.text}
       onFocus={(e) => e.currentTarget.select()}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          e.currentTarget.blur();
-        } else if (e.key === "Escape") {
+        if (e.key === "Escape") {
           skipCommitRef.current = true;
           e.currentTarget.blur();
         }
+      }}
+      onInput={(e) => {
+        // Le textarea grandit avec le contenu multiligne.
+        e.currentTarget.style.height = "auto";
+        e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
       }}
       onBlur={(e) => {
         const skip = skipCommitRef.current;
@@ -51,11 +54,16 @@ export default function TextEditOverlay({
         top: element.y * displayScale,
         left: element.x * displayScale,
         width:
-          Math.max(node?.width() ?? 0, element.fontSize * 6) * displayScale,
+          (element.width ??
+            Math.max(node?.width() ?? 0, element.fontSize * 6)) * displayScale,
         height: ((node?.height() ?? element.fontSize) + 4) * displayScale,
         fontSize: element.fontSize * displayScale,
         lineHeight: 1,
-        fontFamily: LABEL_FONT_FAMILY,
+        fontFamily: element.fontFamily,
+        fontWeight: element.bold ? "bold" : "normal",
+        fontStyle: element.italic ? "italic" : "normal",
+        textDecoration: element.underline ? "underline" : "none",
+        textAlign: element.align,
         color: element.fill,
         transform: `rotate(${element.rotation}deg)`,
         transformOrigin: "top left",

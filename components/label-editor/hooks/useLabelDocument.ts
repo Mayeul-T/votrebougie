@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { ImageElement, LabelElement, TextElement } from "../types";
+import {
+  DEFAULT_FONT_FAMILY,
+  type ImageElement,
+  type LabelElement,
+  type TextElement,
+} from "../types";
 
 type DocumentAction =
   | { type: "add"; element: LabelElement }
@@ -56,6 +61,11 @@ export default function useLabelDocument({
       text: "Votre texte",
       fontSize: 32,
       fill: "#1a1a1a",
+      fontFamily: DEFAULT_FONT_FAMILY,
+      bold: false,
+      italic: false,
+      underline: false,
+      align: "left",
       x: baseWidth / 2 - 90,
       y: baseHeight / 2 - 16,
       rotation: 0,

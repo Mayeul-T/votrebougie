@@ -7,6 +7,7 @@ import useDeleteKey from "./hooks/useDeleteKey";
 import useDisplayScale from "./hooks/useDisplayScale";
 import useLabelDocument from "./hooks/useLabelDocument";
 import TextEditOverlay from "./TextEditOverlay";
+import TextToolbox from "./TextToolbox";
 import type { TextElement } from "./types";
 
 /** Résolution de travail de l'éditeur : 1 cm d'étiquette = 30 px de base. */
@@ -68,13 +69,26 @@ export default function LabelEditor({
 
   const bumpImageTick = useCallback(() => setImageTick((t) => t + 1), []);
 
-  const editingEl = elements.find(
-    (el): el is TextElement => el.id === editingId && el.type === "text",
-  );
+  const findTextEl = (id: string | null) =>
+    elements.find(
+      (el): el is TextElement => el.id === id && el.type === "text",
+    );
+  const editingEl = findTextEl(editingId);
+  const selectedTextEl = findTextEl(selectedId);
   // Nœud Konva du texte en édition, pour caler le textarea sur ses métriques.
   const editingNode = editingEl
     ? (stageRef.current?.findOne(`#${editingEl.id}`) as Konva.Text | undefined)
     : undefined;
+
+  const changeText = (updated: TextElement) => {
+    // Konva ne justifie que dans un bloc de largeur fixe : on fige la
+    // largeur courante du nœud au moment où l'utilisateur choisit justifier.
+    if (updated.align === "justify" && updated.width === undefined) {
+      const node = stageRef.current?.findOne(`#${updated.id}`);
+      if (node) updated = { ...updated, width: Math.ceil(node.width()) };
+    }
+    updateElement(updated);
+  };
 
   return (
     <div className={className}>
@@ -84,6 +98,10 @@ export default function LabelEditor({
         onRemoveSelected={removeSelected}
         canRemove={selectedId !== null}
       />
+
+      {selectedTextEl && (
+        <TextToolbox element={selectedTextEl} onChange={changeText} />
+      )}
 
       <div
         ref={containerRef}

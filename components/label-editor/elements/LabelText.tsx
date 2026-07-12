@@ -2,7 +2,15 @@
 
 import type Konva from "konva";
 import { Text } from "react-konva";
-import { LABEL_FONT_FAMILY, type TextElement } from "../types";
+import type { TextElement } from "../types";
+
+/** Konva combine gras et italique dans un seul attribut `fontStyle`. */
+export function toFontStyle(element: TextElement): string {
+  const parts = [];
+  if (element.italic) parts.push("italic");
+  if (element.bold) parts.push("bold");
+  return parts.join(" ") || "normal";
+}
 
 export default function LabelText({
   element,
@@ -25,7 +33,11 @@ export default function LabelText({
       y={element.y}
       text={element.text}
       fontSize={element.fontSize}
-      fontFamily={LABEL_FONT_FAMILY}
+      fontFamily={element.fontFamily}
+      fontStyle={toFontStyle(element)}
+      textDecoration={element.underline ? "underline" : ""}
+      align={element.align}
+      width={element.width}
       fill={element.fill}
       rotation={element.rotation}
       visible={!isEditing}
@@ -38,13 +50,14 @@ export default function LabelText({
         onChange({ ...element, x: e.target.x(), y: e.target.y() })
       }
       onTransformEnd={(e) => {
-        // Le scale du Transformer devient une taille de police : le texte
-        // reste net quel que soit l'agrandissement.
+        // Le scale du Transformer devient une taille de police (et une
+        // largeur de bloc s'il y en a une) : le texte reste net.
         const node = e.target as Konva.Text;
         const fontSize = Math.max(
           6,
           Math.round(element.fontSize * node.scaleY()),
         );
+        const width = element.width ? element.width * node.scaleX() : undefined;
         node.scaleX(1);
         node.scaleY(1);
         onChange({
@@ -53,6 +66,7 @@ export default function LabelText({
           y: node.y(),
           rotation: node.rotation(),
           fontSize,
+          width,
         });
       }}
     />
