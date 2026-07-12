@@ -1,5 +1,3 @@
-"use client";
-
 import type Konva from "konva";
 import { useCallback, useRef, useState } from "react";
 import EditorStage from "./EditorStage";

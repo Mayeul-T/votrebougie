@@ -5,6 +5,7 @@ import { type RefObject, useEffect, useRef } from "react";
 import { Layer, Rect, Stage, Transformer } from "react-konva";
 import LabelImage from "./elements/LabelImage";
 import LabelText from "./elements/LabelText";
+import useAlignmentGuides from "./hooks/useAlignmentGuides";
 import type { LabelElement } from "./types";
 
 /**
@@ -42,6 +43,15 @@ export default function EditorStage({
   contentLayerRef: RefObject<Konva.Layer | null>;
 }) {
   const trRef = useRef<Konva.Transformer>(null);
+  const guidesLayerRef = useRef<Konva.Layer>(null);
+
+  const alignmentGuides = useAlignmentGuides({
+    contentLayerRef,
+    guidesLayerRef,
+    baseWidth,
+    baseHeight,
+    displayScale,
+  });
 
   // --- Sélection : le Transformer suit l'élément sélectionné ---
   // biome-ignore lint/correctness/useExhaustiveDependencies: elements re-cale le Transformer après un redimensionnement (fontSize, etc.)
@@ -72,7 +82,11 @@ export default function EditorStage({
       onMouseDown={deselectOnEmpty}
       onTouchStart={deselectOnEmpty}
     >
-      <Layer ref={contentLayerRef}>
+      <Layer
+        ref={contentLayerRef}
+        onDragMove={alignmentGuides.onDragMove}
+        onDragEnd={alignmentGuides.onDragEnd}
+      >
         <Rect
           x={0}
           y={0}
@@ -80,6 +94,7 @@ export default function EditorStage({
           height={baseHeight}
           fill="#ffffff"
           listening={false}
+          name="label-background"
         />
         {elements.map((el) =>
           el.type === "image" ? (
@@ -102,7 +117,9 @@ export default function EditorStage({
           ),
         )}
       </Layer>
-      {/* Couche UI séparée : les poignées ne sont jamais exportées. */}
+      {/* Couches UI séparées : guides et poignées ne sont jamais exportés,
+          l'export ne lisant que la couche de contenu. */}
+      <Layer ref={guidesLayerRef} listening={false} />
       <Layer>
         <Transformer
           ref={trRef}
