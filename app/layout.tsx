@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VotreBougie",
+  title: "Votre Bougie",
   description: "Votre image imprimée sur une veilleuse — aperçu 3D interactif.",
 };
 
