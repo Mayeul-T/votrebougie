@@ -2,7 +2,7 @@
 
 import type Konva from "konva";
 import { Text } from "react-konva";
-import { LABEL_FONT_FAMILY, type TextElement } from "./types";
+import { LABEL_FONT_FAMILY, type TextElement } from "../types";
 
 export default function LabelText({
   element,

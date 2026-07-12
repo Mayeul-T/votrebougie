@@ -1,21 +1,18 @@
 "use client";
 
 import type Konva from "konva";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Layer, Rect, Stage, Transformer } from "react-konva";
-import LabelImage from "./LabelImage";
-import LabelText from "./LabelText";
-import {
-  type ImageElement,
-  LABEL_FONT_FAMILY,
-  type LabelElement,
-  type TextElement,
-} from "./types";
+import { useCallback, useRef, useState } from "react";
+import EditorStage from "./EditorStage";
+import EditorToolbox from "./EditorToolbox";
+import useDebouncedExport from "./hooks/useDebouncedExport";
+import useDeleteKey from "./hooks/useDeleteKey";
+import useDisplayScale from "./hooks/useDisplayScale";
+import useLabelDocument from "./hooks/useLabelDocument";
+import TextEditOverlay from "./TextEditOverlay";
+import type { TextElement } from "./types";
 
 /** Résolution de travail de l'éditeur : 1 cm d'étiquette = 30 px de base. */
 const PX_PER_CM = 30;
-/** Largeur cible de la texture exportée, quel que soit l'affichage. */
-const EXPORT_WIDTH = 1200;
 
 export type LabelEditorProps = {
   /** Largeur physique de l'étiquette en cm. */
@@ -27,176 +24,51 @@ export type LabelEditorProps = {
   className?: string;
 };
 
+/**
+ * Assemblage de l'éditeur : le document (useLabelDocument), l'état UI
+ * (sélection, édition), et les sous-composants toolbox / stage / overlay.
+ */
 export default function LabelEditor({
   widthCm,
   heightCm,
   onExport,
   className,
 }: LabelEditorProps) {
-  const baseW = widthCm * PX_PER_CM;
-  const baseH = heightCm * PX_PER_CM;
+  const baseWidth = widthCm * PX_PER_CM;
+  const baseHeight = heightCm * PX_PER_CM;
 
-  const [elements, setElements] = useState<LabelElement[]>([]);
+  // --- État UI, volontairement hors du document (futur historique undo) ---
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   // Bump quand une image finit de décoder : un export parti trop tôt
   // aurait figé un emplacement vide sur la bougie.
   const [imageTick, setImageTick] = useState(0);
-  const [displayScale, setDisplayScale] = useState(1);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const contentLayerRef = useRef<Konva.Layer>(null);
-  const trRef = useRef<Konva.Transformer>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  /** objectURLs vivants, révoqués à la suppression de l'élément. */
-  const objectUrlsRef = useRef(new Map<string, string>());
-  const skipCommitRef = useRef(false);
 
-  // --- L'éditeur suit la largeur de son conteneur ; les coordonnées des
-  // éléments restent en pixels de base, seul le Stage est mis à l'échelle ---
-  useEffect(() => {
-    const wrap = containerRef.current;
-    if (!wrap) return;
-    const measure = () => {
-      if (wrap.clientWidth > 0) setDisplayScale(wrap.clientWidth / baseW);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(wrap);
-    return () => observer.disconnect();
-  }, [baseW]);
+  const displayScale = useDisplayScale(containerRef, baseWidth);
 
-  // --- Sélection : le Transformer suit l'élément sélectionné ---
-  // biome-ignore lint/correctness/useExhaustiveDependencies: elements re-cale le Transformer après un redimensionnement (fontSize, etc.)
-  useEffect(() => {
-    const tr = trRef.current;
-    if (!tr) return;
-    const node =
-      selectedId && selectedId !== editingId
-        ? tr.getStage()?.findOne(`#${selectedId}`)
-        : null;
-    tr.nodes(node ? [node] : []);
-  }, [selectedId, editingId, elements]);
+  const { elements, addText, addImageFromFile, updateElement, removeElement } =
+    useLabelDocument({ baseWidth, baseHeight, onElementAdded: setSelectedId });
 
-  // --- Export débouncé : toute interaction finit par écrire dans
-  // `elements`, cet effet est donc l'unique chemin de sortie ---
-  // biome-ignore lint/correctness/useExhaustiveDependencies: elements et imageTick sont les déclencheurs de l'export
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const layer = contentLayerRef.current;
-      const stage = layer?.getStage();
-      if (!layer || !stage) return;
-      onExport(
-        layer.toDataURL({
-          x: 0,
-          y: 0,
-          width: stage.width(),
-          height: stage.height(),
-          // Compense l'échelle d'affichage : la texture fait toujours
-          // EXPORT_WIDTH px de large, même après un resize de fenêtre.
-          pixelRatio: EXPORT_WIDTH / stage.width(),
-        }),
-      );
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [elements, imageTick, onExport]);
-
-  const updateElement = useCallback((updated: LabelElement) => {
-    setElements((prev) =>
-      prev.map((el) => (el.id === updated.id ? updated : el)),
-    );
-  }, []);
-
-  const bumpImageTick = useCallback(() => setImageTick((t) => t + 1), []);
-
-  const addText = () => {
-    const el: TextElement = {
-      id: crypto.randomUUID(),
-      type: "text",
-      text: "Votre texte",
-      fontSize: 32,
-      fill: "#1a1a1a",
-      x: baseW / 2 - 90,
-      y: baseH / 2 - 16,
-      rotation: 0,
-    };
-    setElements((prev) => [...prev, el]);
-    setSelectedId(el.id);
-  };
-
-  const addImage = (file: File) => {
-    const src = URL.createObjectURL(file);
-    // Préchargement pour connaître les dimensions naturelles.
-    const probe = new window.Image();
-    probe.onload = () => {
-      const k = Math.min(
-        1,
-        (baseW * 0.6) / probe.width,
-        (baseH * 0.6) / probe.height,
-      );
-      const width = probe.width * k;
-      const height = probe.height * k;
-      const el: ImageElement = {
-        id: crypto.randomUUID(),
-        type: "image",
-        src,
-        x: (baseW - width) / 2,
-        y: (baseH - height) / 2,
-        rotation: 0,
-        width,
-        height,
-      };
-      objectUrlsRef.current.set(el.id, src);
-      setElements((prev) => [...prev, el]);
-      setSelectedId(el.id);
-    };
-    probe.src = src;
-  };
+  useDebouncedExport({
+    layerRef: contentLayerRef,
+    onExport,
+    triggers: [elements, imageTick],
+  });
 
   const removeSelected = useCallback(() => {
     if (!selectedId || editingId) return;
-    const url = objectUrlsRef.current.get(selectedId);
-    if (url) {
-      URL.revokeObjectURL(url);
-      objectUrlsRef.current.delete(selectedId);
-    }
-    setElements((prev) => prev.filter((el) => el.id !== selectedId));
+    removeElement(selectedId);
     setSelectedId(null);
-  }, [selectedId, editingId]);
+  }, [selectedId, editingId, removeElement]);
 
-  // --- Suppression au clavier, neutralisée pendant l'édition de texte ---
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Delete" || e.key === "Backspace") removeSelected();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [removeSelected]);
+  // Suppression clavier, neutralisée pendant l'édition via removeSelected.
+  useDeleteKey(removeSelected);
 
-  // --- Libère les objectURLs restants au démontage ---
-  useEffect(() => {
-    const urls = objectUrlsRef.current;
-    return () => {
-      for (const url of urls.values()) URL.revokeObjectURL(url);
-    };
-  }, []);
-
-  const deselectOnEmpty = (
-    e: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
-  ) => {
-    // Le fond blanc est non-interactif : un clic dans le vide cible le Stage.
-    if (e.target === e.target.getStage()) setSelectedId(null);
-  };
-
-  const commitText = (value: string) => {
-    setElements((prev) =>
-      prev.map((el) =>
-        el.id === editingId && el.type === "text" ? { ...el, text: value } : el,
-      ),
-    );
-    setEditingId(null);
-  };
+  const bumpImageTick = useCallback(() => setImageTick((t) => t + 1), []);
 
   const editingEl = elements.find(
     (el): el is TextElement => el.id === editingId && el.type === "text",
@@ -206,145 +78,48 @@ export default function LabelEditor({
     ? (stageRef.current?.findOne(`#${editingEl.id}`) as Konva.Text | undefined)
     : undefined;
 
-  const buttonClass =
-    "rounded-full border border-zinc-300 px-4 py-1.5 text-sm text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-40 disabled:hover:bg-transparent dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800";
-
   return (
     <div className={className}>
-      <div className="flex flex-wrap items-center gap-2 pb-3">
-        <button
-          type="button"
-          className={buttonClass}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          + Image
-        </button>
-        <button type="button" className={buttonClass} onClick={addText}>
-          + Texte
-        </button>
-        <button
-          type="button"
-          className={buttonClass}
-          disabled={!selectedId}
-          onClick={removeSelected}
-        >
-          Supprimer
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) addImage(file);
-          }}
-        />
-      </div>
+      <EditorToolbox
+        onAddImage={addImageFromFile}
+        onAddText={addText}
+        onRemoveSelected={removeSelected}
+        canRemove={selectedId !== null}
+      />
 
       <div
         ref={containerRef}
         className="relative w-full overflow-hidden rounded-lg border border-zinc-300 shadow-sm dark:border-zinc-700"
       >
-        <Stage
-          ref={stageRef}
-          width={baseW * displayScale}
-          height={baseH * displayScale}
-          scaleX={displayScale}
-          scaleY={displayScale}
-          onMouseDown={deselectOnEmpty}
-          onTouchStart={deselectOnEmpty}
-        >
-          <Layer ref={contentLayerRef}>
-            <Rect
-              x={0}
-              y={0}
-              width={baseW}
-              height={baseH}
-              fill="#ffffff"
-              listening={false}
-            />
-            {elements.map((el) =>
-              el.type === "image" ? (
-                <LabelImage
-                  key={el.id}
-                  element={el}
-                  onSelect={() => setSelectedId(el.id)}
-                  onChange={updateElement}
-                  onLoaded={bumpImageTick}
-                />
-              ) : (
-                <LabelText
-                  key={el.id}
-                  element={el}
-                  isEditing={el.id === editingId}
-                  onSelect={() => setSelectedId(el.id)}
-                  onChange={updateElement}
-                  onStartEdit={() => {
-                    setSelectedId(el.id);
-                    setEditingId(el.id);
-                  }}
-                />
-              ),
-            )}
-          </Layer>
-          {/* Couche UI séparée : les poignées ne sont jamais exportées. */}
-          <Layer>
-            <Transformer
-              ref={trRef}
-              rotateEnabled
-              keepRatio
-              enabledAnchors={[
-                "top-left",
-                "top-right",
-                "bottom-left",
-                "bottom-right",
-              ]}
-            />
-          </Layer>
-        </Stage>
+        <EditorStage
+          baseWidth={baseWidth}
+          baseHeight={baseHeight}
+          displayScale={displayScale}
+          elements={elements}
+          selectedId={selectedId}
+          editingId={editingId}
+          onSelect={setSelectedId}
+          onDeselect={() => setSelectedId(null)}
+          onStartEdit={(id) => {
+            setSelectedId(id);
+            setEditingId(id);
+          }}
+          onElementChange={updateElement}
+          onImageLoaded={bumpImageTick}
+          stageRef={stageRef}
+          contentLayerRef={contentLayerRef}
+        />
 
         {editingEl && (
-          <textarea
-            // PoC : le textarea approxime les métriques texte de Konva,
-            // une légère dérive visuelle pendant la frappe est acceptée.
-            // biome-ignore lint/a11y/noAutofocus: l'édition vient d'être demandée au double-clic
-            autoFocus
-            defaultValue={editingEl.text}
-            onFocus={(e) => e.currentTarget.select()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                e.currentTarget.blur();
-              } else if (e.key === "Escape") {
-                skipCommitRef.current = true;
-                e.currentTarget.blur();
-              }
+          <TextEditOverlay
+            element={editingEl}
+            node={editingNode}
+            displayScale={displayScale}
+            onCommit={(value) => {
+              updateElement({ ...editingEl, text: value });
+              setEditingId(null);
             }}
-            onBlur={(e) => {
-              const skip = skipCommitRef.current;
-              skipCommitRef.current = false;
-              if (skip) setEditingId(null);
-              else commitText(e.currentTarget.value);
-            }}
-            className="absolute m-0 resize-none overflow-hidden border-none bg-transparent p-0 outline-none"
-            style={{
-              top: editingEl.y * displayScale,
-              left: editingEl.x * displayScale,
-              width:
-                Math.max(editingNode?.width() ?? 0, editingEl.fontSize * 6) *
-                displayScale,
-              height:
-                ((editingNode?.height() ?? editingEl.fontSize) + 4) *
-                displayScale,
-              fontSize: editingEl.fontSize * displayScale,
-              lineHeight: 1,
-              fontFamily: LABEL_FONT_FAMILY,
-              color: editingEl.fill,
-              transform: `rotate(${editingEl.rotation}deg)`,
-              transformOrigin: "top left",
-            }}
+            onCancel={() => setEditingId(null)}
           />
         )}
       </div>

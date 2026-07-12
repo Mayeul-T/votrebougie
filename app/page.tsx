@@ -1,4 +1,4 @@
-import CandleConfigurator from "@/components/CandleConfigurator";
+import CandleConfigurator from "@/components/candle-configurator/CandleConfigurator";
 
 export default function Home() {
   return (
