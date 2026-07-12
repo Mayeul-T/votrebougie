@@ -59,7 +59,7 @@ export const CANDLE_TEMPLATES: CandleTemplate[] = [
       heightMm: 140,
       footMm: 5,
       thicknessMm: 1,
-      color: "#b3312e",
+      color: "#95211f",
       opacity: 0.9,
     },
     label: { widthMm: 200, heightMm: 70 },

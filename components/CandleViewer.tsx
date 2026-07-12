@@ -190,35 +190,83 @@ export default function CandleViewer({
     scene.add(wax);
 
     // --- Le godet translucide collé à la cire (optionnel) ---
+    // Ordre de rendu imposé : paroi arrière (0) < flamme (1) < paroi
+    // avant (2) < étiquette (3). Le tri par distance des transparents est
+    // instable ici, et une paroi DoubleSide se dessine en un seul passage,
+    // impossible d'y intercaler la flamme : la paroi est donc scindée en
+    // deux passes, faces arrière puis faces avant.
+    // Les demi-rebords sont réorientés face à la caméra à chaque frame
+    // (voir la boucle de rendu).
+    let cupLipNear: THREE.Mesh | null = null;
+    let cupLipFar: THREE.Mesh | null = null;
     if (hasCup) {
-      const plastic = new THREE.MeshPhysicalMaterial({
+      const plasticParams = {
         color: new THREE.Color(cupColor),
         roughness: 0.35,
         clearcoat: 0.6,
         clearcoatRoughness: 0.3,
         transparent: true,
         opacity: cupOpacity,
-        side: THREE.DoubleSide,
         depthWrite: false,
-      });
-      const cupWall = new THREE.Mesh(
-        new THREE.CylinderGeometry(CUP_R, CUP_R, CUP_H, 96, 1, true),
-        plastic,
+      };
+      const wallGeometry = new THREE.CylinderGeometry(
+        CUP_R,
+        CUP_R,
+        CUP_H,
+        96,
+        1,
+        true,
       );
-      cupWall.position.y = groundY + CUP_H / 2;
+      const cupWallBack = new THREE.Mesh(
+        wallGeometry,
+        new THREE.MeshPhysicalMaterial({
+          ...plasticParams,
+          side: THREE.BackSide,
+        }),
+      );
+      const cupWallFront = new THREE.Mesh(
+        wallGeometry,
+        new THREE.MeshPhysicalMaterial({
+          ...plasticParams,
+          side: THREE.FrontSide,
+        }),
+      );
+      cupWallBack.renderOrder = 0;
+      cupWallFront.renderOrder = 2;
+      cupWallBack.position.y = groundY + CUP_H / 2;
+      cupWallFront.position.y = groundY + CUP_H / 2;
+
+      // Fond : masqué par la cire opaque, une passe DoubleSide suffit.
+      const plasticDouble = new THREE.MeshPhysicalMaterial({
+        ...plasticParams,
+        side: THREE.DoubleSide,
+      });
       const cupBottom = new THREE.Mesh(
         new THREE.CircleGeometry(CUP_R, 96),
-        plastic,
+        plasticDouble,
       );
       cupBottom.rotation.x = -Math.PI / 2;
       cupBottom.position.y = cupBotY;
-      const cupLip = new THREE.Mesh(
-        new THREE.TorusGeometry(CUP_R, 0.016, 12, 96),
-        plastic,
+      cupBottom.renderOrder = 0;
+
+      // Le rebord traverse la zone de la flamme, mais un tore ne se
+      // scinde pas par side (surface fermée : ses faces avant se voient
+      // des deux côtés). Deux demi-tores, réorientés chaque frame : la
+      // moitié côté caméra devant la flamme, l'opposée derrière.
+      const lipGeometry = new THREE.TorusGeometry(
+        CUP_R,
+        0.016,
+        12,
+        48,
+        Math.PI,
       );
-      cupLip.rotation.x = Math.PI / 2;
-      cupLip.position.y = cupTopY;
-      scene.add(cupWall, cupBottom, cupLip);
+      cupLipNear = new THREE.Mesh(lipGeometry, plasticDouble);
+      cupLipNear.renderOrder = 2;
+      cupLipNear.position.y = cupTopY;
+      cupLipFar = new THREE.Mesh(lipGeometry, plasticDouble);
+      cupLipFar.renderOrder = 0;
+      cupLipFar.position.y = cupTopY;
+      scene.add(cupWallBack, cupWallFront, cupBottom, cupLipNear, cupLipFar);
     }
 
     // --- La mèche : tube brun courbé, bout incandescent ---
@@ -268,6 +316,9 @@ export default function CandleViewer({
         );
         sprite.scale.set(FLAME_H * aspect, FLAME_H, 1);
         sprite.position.y = FLAME_BASE_Y + FLAME_H / 2;
+        // Entre les deux passes du godet : derrière la paroi avant,
+        // devant la paroi arrière.
+        sprite.renderOrder = 1;
         scene.add(sprite);
         flameSprite = sprite;
         disposables.push(tex, sprite.material);
@@ -278,6 +329,13 @@ export default function CandleViewer({
     const t0 = performance.now();
     renderer.setAnimationLoop(() => {
       const t = (performance.now() - t0) / 1000;
+      if (cupLipNear && cupLipFar) {
+        // Chaque demi-rebord suit l'azimut de la caméra : le demi-tore
+        // spans φ∈[0,π], centré azimut -rotZ (voir TorusGeometry + x=π/2).
+        const az = Math.atan2(camera.position.x, camera.position.z);
+        cupLipNear.rotation.set(Math.PI / 2, 0, -az);
+        cupLipFar.rotation.set(Math.PI / 2, 0, Math.PI - az);
+      }
       if (flameSprite?.material.map) {
         const frame = Math.floor(t * flameFps) % flameFrames;
         flameSprite.material.map.offset.x = frame / flameFrames;
@@ -415,9 +473,9 @@ export default function CandleViewer({
           depthWrite: false,
         }),
       );
-      // Toujours après le godet : le tri par distance est instable entre
-      // deux cylindres quasi concentriques.
-      mesh.renderOrder = 1;
+      // Toujours après le godet (renderOrder 0 et 2) : le tri par distance
+      // est instable entre deux cylindres quasi concentriques.
+      mesh.renderOrder = 3;
       mesh.position.y = world.labelY;
       // L'ancienne étiquette reste affichée jusqu'à ce que la nouvelle soit
       // prête : pas de clignotement pendant les mises à jour rapprochées.
