@@ -22,27 +22,28 @@ const LABEL_WIDTH_CM = 20;
 const LABEL_HEIGHT_CM = 7;
 
 /**
- * Configurateur : l'éditeur d'étiquette à gauche, la bougie 3D à droite.
- * La texture exportée par l'éditeur (débouncée à 500 ms) est projetée
- * telle quelle sur le godet.
+ * Configurateur : l'aperçu 3D à gauche (20 % de la largeur), l'éditeur
+ * d'étiquette en grand à droite (80 %). La texture exportée par l'éditeur
+ * (débouncée à 500 ms) est projetée telle quelle sur le godet.
  */
 export default function CandleConfigurator() {
   const [labelDataUrl, setLabelDataUrl] = useState<string | null>(null);
 
   return (
-    <div className="grid w-full items-center gap-8 lg:grid-cols-2">
-      <LabelEditor
-        widthCm={LABEL_WIDTH_CM}
-        heightCm={LABEL_HEIGHT_CM}
-        onExport={setLabelDataUrl}
-      />
+    <div className="grid w-full items-center gap-8 lg:grid-cols-[1fr_4fr]">
       <CandleViewer
         label={
           labelDataUrl
             ? { imageUrl: labelDataUrl, heightCm: LABEL_HEIGHT_CM }
             : undefined
         }
-        className="h-[32rem] w-full"
+        className="h-72 w-full min-w-0 overflow-hidden lg:h-[28rem]"
+      />
+      <LabelEditor
+        widthCm={LABEL_WIDTH_CM}
+        heightCm={LABEL_HEIGHT_CM}
+        onExport={setLabelDataUrl}
+        className="w-full min-w-0"
       />
     </div>
   );

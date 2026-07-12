@@ -8,10 +8,6 @@ export default function Home() {
           <h1 className="text-4xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
             VotreBougie
           </h1>
-          <p className="max-w-md text-lg leading-7 text-zinc-600 dark:text-zinc-400">
-            Composez votre étiquette, elle s'imprime en direct sur la veilleuse.
-            Faites-la tourner pour la découvrir sous tous les angles.
-          </p>
         </header>
         <CandleConfigurator />
       </main>

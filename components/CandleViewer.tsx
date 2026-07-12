@@ -265,6 +265,10 @@ export default function CandleViewer({
       });
       for (const d of disposables) d.dispose();
       renderer.dispose();
+      // Libère le contexte WebGL immédiatement : sans ça, les remontages
+      // (StrictMode, hot-reload) accumulent des contextes jusqu'à ce que
+      // le navigateur bloque toute nouvelle création.
+      renderer.forceContextLoss();
       renderer.domElement.remove();
     };
   }, [

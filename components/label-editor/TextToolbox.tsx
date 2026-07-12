@@ -58,7 +58,7 @@ export default function TextToolbox({
   const keepFocus = (e: React.MouseEvent) => e.preventDefault();
 
   return (
-    <div className="flex flex-wrap items-center gap-2 pb-3">
+    <div className="flex flex-wrap items-center gap-2">
       <select
         value={element.fontFamily}
         onChange={(e) => onChange({ ...element, fontFamily: e.target.value })}
