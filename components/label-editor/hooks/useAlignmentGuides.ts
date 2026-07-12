@@ -3,6 +3,7 @@
 import Konva from "konva";
 import { type RefObject, useCallback } from "react";
 import {
+  clampRectToBounds,
   computeSnap,
   getGuideStops,
   type Rect,
@@ -125,6 +126,14 @@ export default function useAlignmentGuides({
         // l'accrochage se relâche naturellement au-delà du seuil.
         node.x(node.x() + dx);
         node.y(node.y() + dy);
+        // Puis on interdit de sortir de l'étiquette.
+        const clamp = clampRectToBounds(
+          node.getClientRect({ relativeTo: layer }),
+          baseWidth,
+          baseHeight,
+        );
+        node.x(node.x() + clamp.dx);
+        node.y(node.y() + clamp.dy);
       }
 
       guidesLayer.destroyChildren();

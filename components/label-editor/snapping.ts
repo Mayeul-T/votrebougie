@@ -25,24 +25,19 @@ export type SnapResult = {
 export type GuideStops = { vertical: number[]; horizontal: number[] };
 
 /**
- * Positions d'accrochage candidates : bords et centres de l'étiquette,
- * puis bords et centres de chacun des autres éléments.
- * L'axe horizontal de l'étiquette s'accroche aussi aux quarts (l'étiquette
- * enveloppe la bougie : on peut ainsi centrer sur une moitié visible).
+ * Positions d'accrochage candidates : centre et quarts horizontaux de
+ * l'étiquette (elle enveloppe la bougie : on peut ainsi centrer sur une
+ * moitié visible), puis bords et centres de chacun des autres éléments.
+ * Pas de stops sur les bords de l'étiquette : le déplacement y est déjà
+ * borné, la butée fait office d'accrochage.
  */
 export function getGuideStops(
   baseWidth: number,
   baseHeight: number,
   otherRects: Rect[],
 ): GuideStops {
-  const vertical = [
-    0,
-    baseWidth / 4,
-    baseWidth / 2,
-    (3 * baseWidth) / 4,
-    baseWidth,
-  ];
-  const horizontal = [0, baseHeight / 2, baseHeight];
+  const vertical = [baseWidth / 4, baseWidth / 2, (3 * baseWidth) / 4];
+  const horizontal = [baseHeight / 2];
   for (const r of otherRects) {
     vertical.push(r.x, r.x + r.width / 2, r.x + r.width);
     horizontal.push(r.y, r.y + r.height / 2, r.y + r.height);
@@ -65,6 +60,53 @@ function snapAxis(stops: number[], points: number[], threshold: number) {
     }
   }
   return best;
+}
+
+/**
+ * Décalage (dx, dy) à appliquer pour ramener un rectangle dans les bornes
+ * [0, width] × [0, height]. Si le rectangle est plus grand que la zone,
+ * son bord gauche/haut fait foi.
+ */
+export function clampRectToBounds(
+  rect: Rect,
+  width: number,
+  height: number,
+): { dx: number; dy: number } {
+  let dx = 0;
+  let dy = 0;
+  if (rect.x + rect.width > width) dx = width - (rect.x + rect.width);
+  if (rect.y + rect.height > height) dy = height - (rect.y + rect.height);
+  if (rect.x + dx < 0) dx = -rect.x;
+  if (rect.y + dy < 0) dy = -rect.y;
+  return { dx, dy };
+}
+
+/** Boîte du Transformer Konva : position, taille et rotation en radians. */
+export type RotatedBox = Rect & { rotation: number };
+
+/** AABB d'une boîte pivotée autour de son coin haut-gauche. */
+export function rotatedBoxAABB(box: RotatedBox): Rect {
+  const cos = Math.cos(box.rotation);
+  const sin = Math.sin(box.rotation);
+  const corners = [
+    { x: 0, y: 0 },
+    { x: box.width, y: 0 },
+    { x: box.width, y: box.height },
+    { x: 0, y: box.height },
+  ].map((p) => ({
+    x: box.x + p.x * cos - p.y * sin,
+    y: box.y + p.x * sin + p.y * cos,
+  }));
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(...xs) - minX,
+    height: Math.max(...ys) - minY,
+  };
 }
 
 /** Stop le plus proche d'une valeur isolée sous le seuil, sinon null. */

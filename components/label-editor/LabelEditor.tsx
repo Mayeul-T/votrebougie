@@ -104,21 +104,19 @@ export default function LabelEditor({
   };
 
   return (
-    <div
-      className={`flex flex-col gap-4 lg:flex-row lg:items-start ${className ?? ""}`}
-    >
-      <EditorToolbox
-        onAddImage={addImageFromFile}
-        onAddText={addText}
-        onRemoveSelected={removeSelected}
-        canRemove={selectedId !== null}
-      />
-
-      <div className="min-w-0 flex-1">
-        {/* Hauteur réservée : la barre contextuelle apparaît et disparaît
-            sans décaler l'étiquette (min-h : elle peut passer sur deux
-            lignes en mobile). */}
-        <div className="flex min-h-12 items-center">
+    <div className={`flex flex-col ${className ?? ""}`}>
+      <div className="min-w-0">
+        {/* Barre d'outils au-dessus de l'étiquette : actions du document à
+            gauche, options contextuelles du texte à droite. Hauteur
+            réservée (min-h) : la barre contextuelle apparaît et disparaît
+            sans décaler l'étiquette. */}
+        <div className="flex min-h-12 flex-wrap items-center gap-x-6 gap-y-2 pb-2">
+          <EditorToolbox
+            onAddImage={addImageFromFile}
+            onAddText={addText}
+            onRemoveSelected={removeSelected}
+            canRemove={selectedId !== null}
+          />
           {selectedTextEl && (
             <TextToolbox element={selectedTextEl} onChange={changeText} />
           )}

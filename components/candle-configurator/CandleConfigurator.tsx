@@ -22,15 +22,16 @@ const LABEL_WIDTH_CM = 20;
 const LABEL_HEIGHT_CM = 7;
 
 /**
- * Configurateur : l'aperçu 3D à gauche (20 % de la largeur), l'éditeur
- * d'étiquette en grand à droite (80 %). La texture exportée par l'éditeur
- * (débouncée à 500 ms) est projetée telle quelle sur le godet.
+ * Configurateur : l'aperçu 3D à gauche (~30 % de la largeur), l'éditeur
+ * d'étiquette à droite, sa barre d'outils au-dessus de l'étiquette. La
+ * texture exportée par l'éditeur (débouncée à 500 ms) est projetée telle
+ * quelle sur le godet.
  */
 export default function CandleConfigurator() {
   const [labelDataUrl, setLabelDataUrl] = useState<string | null>(null);
 
   return (
-    <div className="grid w-full items-center gap-8 lg:grid-cols-[1fr_4fr]">
+    <div className="grid w-full items-center gap-8 lg:grid-cols-[3fr_7fr]">
       <CandleViewer
         label={
           labelDataUrl

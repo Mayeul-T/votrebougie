@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { computeSnap, getGuideStops, type Rect, snapValue } from "./snapping";
+import {
+  clampRectToBounds,
+  computeSnap,
+  getGuideStops,
+  type Rect,
+  rotatedBoxAABB,
+  snapValue,
+} from "./snapping";
 
 const LABEL = { width: 600, height: 210 };
 
@@ -7,10 +14,10 @@ const stops = (others: Rect[] = []) =>
   getGuideStops(LABEL.width, LABEL.height, others);
 
 describe("getGuideStops", () => {
-  test("contient les bords, le centre et les quarts horizontaux de l'étiquette", () => {
+  test("contient le centre et les quarts de l'étiquette, sans les bords", () => {
     expect(stops()).toEqual({
-      vertical: [0, 150, 300, 450, 600],
-      horizontal: [0, 105, 210],
+      vertical: [150, 300, 450],
+      horizontal: [105],
     });
   });
 
@@ -34,6 +41,57 @@ describe("snapValue", () => {
 
   test("null hors seuil", () => {
     expect(snapValue([0, 150, 300], 100, 5)).toBeNull();
+  });
+});
+
+describe("clampRectToBounds", () => {
+  test("aucun décalage quand le rectangle est dans la zone", () => {
+    expect(
+      clampRectToBounds({ x: 10, y: 10, width: 50, height: 20 }, 600, 210),
+    ).toEqual({ dx: 0, dy: 0 });
+  });
+
+  test("ramène un débordement à droite et en bas", () => {
+    expect(
+      clampRectToBounds({ x: 580, y: 200, width: 50, height: 20 }, 600, 210),
+    ).toEqual({ dx: -30, dy: -10 });
+  });
+
+  test("ramène un débordement à gauche et en haut", () => {
+    expect(
+      clampRectToBounds({ x: -5, y: -8, width: 50, height: 20 }, 600, 210),
+    ).toEqual({ dx: 5, dy: 8 });
+  });
+
+  test("rectangle plus large que la zone : bord gauche prioritaire", () => {
+    const { dx } = clampRectToBounds(
+      { x: 10, y: 0, width: 700, height: 20 },
+      600,
+      210,
+    );
+    expect(dx).toBe(-10);
+  });
+});
+
+describe("rotatedBoxAABB", () => {
+  test("sans rotation, la boîte est inchangée", () => {
+    expect(
+      rotatedBoxAABB({ x: 10, y: 20, width: 100, height: 40, rotation: 0 }),
+    ).toEqual({ x: 10, y: 20, width: 100, height: 40 });
+  });
+
+  test("à 90°, largeur et hauteur s'échangent", () => {
+    const aabb = rotatedBoxAABB({
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 40,
+      rotation: Math.PI / 2,
+    });
+    expect(aabb.width).toBeCloseTo(40);
+    expect(aabb.height).toBeCloseTo(100);
+    expect(aabb.x).toBeCloseTo(-40);
+    expect(aabb.y).toBeCloseTo(0);
   });
 });
 
@@ -65,8 +123,9 @@ describe("computeSnap", () => {
   });
 
   test("choisit le stop le plus proche et peut accrocher les deux axes", () => {
-    // Bord gauche à 1 px de 0, bord haut à 2 px de 0 : double accrochage.
-    const drag: Rect = { x: 1, y: -2, width: 100, height: 30 };
+    // Bord gauche à 1 px du quart (150), centre vertical à 2 px du
+    // centre de l'étiquette (105) : double accrochage.
+    const drag: Rect = { x: 151, y: 88, width: 100, height: 30 };
     const { dx, dy, guides } = computeSnap(stops(), drag, 5);
     expect(dx).toBe(-1);
     expect(dy).toBe(2);

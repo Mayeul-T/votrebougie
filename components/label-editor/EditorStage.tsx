@@ -6,7 +6,11 @@ import { Layer, Rect, Stage, Transformer } from "react-konva";
 import LabelImage from "./elements/LabelImage";
 import LabelText from "./elements/LabelText";
 import useAlignmentGuides from "./hooks/useAlignmentGuides";
+import { rotatedBoxAABB } from "./snapping";
 import type { LabelElement } from "./types";
+
+/** Tolérance sur les bords : l'accrochage pose les boîtes pile dessus. */
+const BOUNDS_EPS = 0.5;
 
 /**
  * La surface d'édition : Stage Konva, fond blanc, éléments, sélection.
@@ -147,6 +151,19 @@ export default function EditorStage({
             // Pas d'accrochage pour la poignée de rotation.
             if (!tr || !anchor || anchor === "rotater") return newPos;
             return alignmentGuides.boundAnchor(newPos, tr.nodes()[0], anchor);
+          }}
+          boundBoxFunc={(oldBox, newBox) => {
+            // Resize et rotation sont bloqués dès que la boîte (AABB, en
+            // coordonnées du Stage) sortirait de l'étiquette.
+            const stage = trRef.current?.getStage();
+            if (!stage) return newBox;
+            const aabb = rotatedBoxAABB(newBox);
+            const isOut =
+              aabb.x < -BOUNDS_EPS ||
+              aabb.y < -BOUNDS_EPS ||
+              aabb.x + aabb.width > stage.width() + BOUNDS_EPS ||
+              aabb.y + aabb.height > stage.height() + BOUNDS_EPS;
+            return isOut ? oldBox : newBox;
           }}
         />
       </Layer>
