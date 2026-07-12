@@ -116,52 +116,56 @@ export default function LabelEditor({
         <TextToolbox element={selectedTextEl} onChange={changeText} />
       )}
 
-      <div
-        ref={containerRef}
-        className="relative w-full overflow-hidden rounded-lg border border-zinc-300 shadow-sm dark:border-zinc-700"
-      >
-        <EditorStage
-          baseWidth={baseWidth}
-          baseHeight={baseHeight}
-          displayScale={displayScale}
-          elements={elements}
-          selectedId={selectedId}
-          editingId={editingId}
-          onSelect={setSelectedId}
-          onDeselect={() => setSelectedId(null)}
-          onStartEdit={(id) => {
-            editOriginalTextRef.current = findTextEl(id)?.text ?? "";
-            setSelectedId(id);
-            setEditingId(id);
-          }}
-          onElementChange={updateElement}
-          onImageLoaded={bumpImageTick}
-          stageRef={stageRef}
-          contentLayerRef={contentLayerRef}
-        />
-
-        {editingEl && (
-          <TextEditOverlay
-            element={editingEl}
-            node={editingNode}
+      {/* Surface de travail à peine teintée ; l'étiquette « posée »
+          dessus s'en détache par son blanc pur et son ombre portée. */}
+      <div className="w-full bg-zinc-100 p-8">
+        <div
+          ref={containerRef}
+          className="relative w-full shadow-[0_6px_18px_rgba(0,0,0,0.28)]"
+        >
+          <EditorStage
+            baseWidth={baseWidth}
+            baseHeight={baseHeight}
             displayScale={displayScale}
-            onLiveChange={(value) =>
-              updateElement({ ...editingEl, text: value })
-            }
-            onCommit={(value) => {
-              updateElement({ ...editingEl, text: value });
-              setEditingId(null);
+            elements={elements}
+            selectedId={selectedId}
+            editingId={editingId}
+            onSelect={setSelectedId}
+            onDeselect={() => setSelectedId(null)}
+            onStartEdit={(id) => {
+              editOriginalTextRef.current = findTextEl(id)?.text ?? "";
+              setSelectedId(id);
+              setEditingId(id);
             }}
-            onCancel={() => {
-              // Échap : on rétablit le texte tel qu'il était au double-clic.
-              updateElement({
-                ...editingEl,
-                text: editOriginalTextRef.current,
-              });
-              setEditingId(null);
-            }}
+            onElementChange={updateElement}
+            onImageLoaded={bumpImageTick}
+            stageRef={stageRef}
+            contentLayerRef={contentLayerRef}
           />
-        )}
+
+          {editingEl && (
+            <TextEditOverlay
+              element={editingEl}
+              node={editingNode}
+              displayScale={displayScale}
+              onLiveChange={(value) =>
+                updateElement({ ...editingEl, text: value })
+              }
+              onCommit={(value) => {
+                updateElement({ ...editingEl, text: value });
+                setEditingId(null);
+              }}
+              onCancel={() => {
+                // Échap : on rétablit le texte tel qu'il était au double-clic.
+                updateElement({
+                  ...editingEl,
+                  text: editOriginalTextRef.current,
+                });
+                setEditingId(null);
+              }}
+            />
+          )}
+        </div>
       </div>
       <p className="pt-2 text-sm text-zinc-500 dark:text-zinc-400">
         Étiquette {widthCm} × {heightCm} cm — double-cliquez un texte pour
