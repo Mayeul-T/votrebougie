@@ -200,11 +200,12 @@ export default function CandleViewer({
     let cupLipNear: THREE.Mesh | null = null;
     let cupLipFar: THREE.Mesh | null = null;
     if (hasCup) {
+      // Plastique lisse : rugosités basses, les reflets restent nets.
       const plasticParams = {
         color: new THREE.Color(cupColor),
-        roughness: 0.35,
+        roughness: 0.05,
         clearcoat: 0.6,
-        clearcoatRoughness: 0.3,
+        clearcoatRoughness: 0.05,
         transparent: true,
         opacity: cupOpacity,
         depthWrite: false,
