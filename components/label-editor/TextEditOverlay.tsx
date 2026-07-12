@@ -14,6 +14,7 @@ export default function TextEditOverlay({
   element,
   node,
   displayScale,
+  onLiveChange,
   onCommit,
   onCancel,
 }: {
@@ -21,6 +22,8 @@ export default function TextEditOverlay({
   /** Nœud Konva du texte en édition, pour caler position et dimensions. */
   node: Konva.Text | undefined;
   displayScale: number;
+  /** Appelé à chaque frappe : le visuel de la bougie suit en direct. */
+  onLiveChange: (value: string) => void;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -42,6 +45,7 @@ export default function TextEditOverlay({
         // Le textarea grandit avec le contenu multiligne.
         e.currentTarget.style.height = "auto";
         e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+        onLiveChange(e.currentTarget.value);
       }}
       onBlur={(e) => {
         const skip = skipCommitRef.current;

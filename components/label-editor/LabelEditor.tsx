@@ -46,6 +46,10 @@ export default function LabelEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const contentLayerRef = useRef<Konva.Layer>(null);
+  /** Texte au moment du double-clic, restauré si l'édition est annulée. */
+  const editOriginalTextRef = useRef<string>("");
+  const editingIdRef = useRef<string | null>(null);
+  editingIdRef.current = editingId;
 
   const displayScale = useDisplayScale(containerRef, baseWidth);
 
@@ -56,6 +60,15 @@ export default function LabelEditor({
     layerRef: contentLayerRef,
     onExport,
     triggers: [elements, imageTick],
+    // Le texte en cours d'édition est masqué à l'écran (le textarea le
+    // recouvre) mais doit apparaître sur la texture de la bougie.
+    prepare: () => {
+      const id = editingIdRef.current;
+      const node = id ? stageRef.current?.findOne(`#${id}`) : null;
+      if (!node) return undefined;
+      node.visible(true);
+      return () => node.visible(false);
+    },
   });
 
   const removeSelected = useCallback(() => {
@@ -117,6 +130,7 @@ export default function LabelEditor({
           onSelect={setSelectedId}
           onDeselect={() => setSelectedId(null)}
           onStartEdit={(id) => {
+            editOriginalTextRef.current = findTextEl(id)?.text ?? "";
             setSelectedId(id);
             setEditingId(id);
           }}
@@ -131,11 +145,21 @@ export default function LabelEditor({
             element={editingEl}
             node={editingNode}
             displayScale={displayScale}
+            onLiveChange={(value) =>
+              updateElement({ ...editingEl, text: value })
+            }
             onCommit={(value) => {
               updateElement({ ...editingEl, text: value });
               setEditingId(null);
             }}
-            onCancel={() => setEditingId(null)}
+            onCancel={() => {
+              // Échap : on rétablit le texte tel qu'il était au double-clic.
+              updateElement({
+                ...editingEl,
+                text: editOriginalTextRef.current,
+              });
+              setEditingId(null);
+            }}
           />
         )}
       </div>
