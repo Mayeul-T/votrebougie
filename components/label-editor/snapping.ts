@@ -67,6 +67,24 @@ function snapAxis(stops: number[], points: number[], threshold: number) {
   return best;
 }
 
+/** Stop le plus proche d'une valeur isolée sous le seuil, sinon null. */
+export function snapValue(
+  stops: number[],
+  value: number,
+  threshold: number,
+): number | null {
+  let best: number | null = null;
+  let bestDiff = threshold;
+  for (const stop of stops) {
+    const diff = Math.abs(stop - value);
+    if (diff < bestDiff) {
+      best = stop;
+      bestDiff = diff;
+    }
+  }
+  return best;
+}
+
 /** Calcule l'accrochage du rectangle traîné contre les positions candidates. */
 export function computeSnap(
   stops: GuideStops,

@@ -85,7 +85,7 @@ export default function EditorStage({
       <Layer
         ref={contentLayerRef}
         onDragMove={alignmentGuides.onDragMove}
-        onDragEnd={alignmentGuides.onDragEnd}
+        onDragEnd={alignmentGuides.clearGuides}
       >
         <Rect
           x={0}
@@ -131,6 +131,20 @@ export default function EditorStage({
             "bottom-left",
             "bottom-right",
           ]}
+          onTransform={() => {
+            // Les guides s'affichent aussi pendant le resize, sur le nœud
+            // en cours de transformation.
+            const node = trRef.current?.nodes()[0];
+            if (node) alignmentGuides.onTransformMove(node);
+          }}
+          onTransformEnd={alignmentGuides.clearGuides}
+          anchorDragBoundFunc={(_oldPos, newPos) => {
+            const tr = trRef.current;
+            const anchor = tr?.getActiveAnchor();
+            // Pas d'accrochage pour la poignée de rotation.
+            if (!tr || !anchor || anchor === "rotater") return newPos;
+            return alignmentGuides.boundAnchor(newPos, tr.nodes()[0], anchor);
+          }}
         />
       </Layer>
     </Stage>

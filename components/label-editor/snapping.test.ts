@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { computeSnap, getGuideStops, type Rect } from "./snapping";
+import { computeSnap, getGuideStops, type Rect, snapValue } from "./snapping";
 
 const LABEL = { width: 600, height: 210 };
 
@@ -23,6 +23,17 @@ describe("getGuideStops", () => {
     expect(horizontal).toContain(50);
     expect(horizontal).toContain(60);
     expect(horizontal).toContain(70);
+  });
+});
+
+describe("snapValue", () => {
+  test("accroche au stop le plus proche sous le seuil", () => {
+    expect(snapValue([0, 150, 300], 148, 5)).toBe(150);
+    expect(snapValue([0, 150, 300], 152, 5)).toBe(150);
+  });
+
+  test("null hors seuil", () => {
+    expect(snapValue([0, 150, 300], 100, 5)).toBeNull();
   });
 });
 
