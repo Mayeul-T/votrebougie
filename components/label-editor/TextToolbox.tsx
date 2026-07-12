@@ -90,6 +90,14 @@ export default function TextToolbox({
         title="Taille de police"
       />
 
+      <input
+        type="color"
+        value={element.fill}
+        onChange={(e) => onChange({ ...element, fill: e.target.value })}
+        className="h-9 w-9 cursor-pointer rounded-lg border border-zinc-300 bg-transparent p-1 dark:border-zinc-700"
+        title="Couleur du texte"
+      />
+
       <div className={groupClass}>
         <button
           type="button"
