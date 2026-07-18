@@ -111,6 +111,27 @@ def pick_part_mask(masks: np.ndarray, scores: np.ndarray, subject_px: int) -> np
     return masks[int(np.argmax(scores))]
 
 
+def absorb_soft_halo(part_mask: np.ndarray, base_alpha: np.ndarray) -> np.ndarray:
+    """Étend la découpe au liseré du contour extérieur qui borde le morceau.
+
+    La frontière du masque SAM passe quelques pixels à l'intérieur de celle
+    de l'alpha BiRefNet (qui est en plus adoucie) : sans cela, retirer un
+    morceau qui touche le fond laisse une bordure fantôme à sa forme. On
+    absorbe, près du morceau retiré, les pixels du sujet proches du fond
+    (contour extérieur, bord d'image compris) ou semi-transparents —
+    l'intérieur opaque du sujet (ex. la statue au-dessus du socle) est
+    intouché."""
+    k = max(3, round(0.004 * max(base_alpha.shape)))  # ~8 px à 2048
+    kernel = np.ones((2 * k + 1, 2 * k + 1), np.uint8)
+    dilated = cv2.dilate(part_mask.astype(np.uint8), kernel) > 0
+    background = (base_alpha == 0).astype(np.uint8)
+    background[0, :] = background[-1, :] = 1  # hors-cadre = fond (sujet coupé
+    background[:, 0] = background[:, -1] = 1  # par le bord de l'image)
+    near_background = cv2.dilate(background, kernel) > 0
+    halo = dilated & (base_alpha > 0) & (near_background | (base_alpha < 250))
+    return part_mask | halo
+
+
 def clicked_component(mask: np.ndarray, x: int, y: int) -> np.ndarray:
     """Composante connexe sous le clic, trous d'épingle refermés."""
     m = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
@@ -196,6 +217,7 @@ def click(session_id: str, body: Click) -> Response:
     subject_px = int((s.base_alpha > 0).sum())
     part_mask = pick_part_mask(masks.astype(bool), scores, subject_px)
     part_mask = clicked_component(part_mask, px, py) & (s.base_alpha > 0)
+    part_mask = absorb_soft_halo(part_mask, s.base_alpha)
     if part_mask.any():
         s.removed.append({"id": uuid.uuid4().hex, "mask": part_mask})
     return png_response(s, session_id)
