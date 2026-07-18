@@ -11,6 +11,7 @@ import {
 type DocumentAction =
   | { type: "add"; element: LabelElement }
   | { type: "update"; element: LabelElement }
+  | { type: "setSrc"; id: string; src: string }
   | { type: "remove"; id: string };
 
 /**
@@ -29,6 +30,13 @@ function documentReducer(
       return elements.map((el) =>
         el.id === action.element.id ? action.element : el,
       );
+    case "setSrc":
+      // Géométrie conservée : le PNG détouré a les dimensions de l'original.
+      return elements.map((el) =>
+        el.id === action.id && el.type === "image"
+          ? { ...el, src: action.src }
+          : el,
+      );
     case "remove":
       return elements.filter((el) => el.id !== action.id);
   }
@@ -42,17 +50,22 @@ export default function useLabelDocument({
   baseWidth,
   baseHeight,
   onElementAdded,
+  onImageFileAdded,
 }: {
   baseWidth: number;
   baseHeight: number;
   /** Appelé après chaque ajout (pour sélectionner l'élément créé). */
   onElementAdded?: (id: string) => void;
+  /** Appelé quand une image importée est ajoutée (pour la gomme magique). */
+  onImageFileAdded?: (id: string, file: File) => void;
 }) {
   const [elements, dispatch] = useReducer(documentReducer, []);
   /** objectURLs vivants, révoqués à la suppression de l'élément. */
   const objectUrlsRef = useRef(new Map<string, string>());
   const onElementAddedRef = useRef(onElementAdded);
   onElementAddedRef.current = onElementAdded;
+  const onImageFileAddedRef = useRef(onImageFileAdded);
+  onImageFileAddedRef.current = onImageFileAdded;
 
   const addText = useCallback(() => {
     const el: TextElement = {
@@ -100,6 +113,7 @@ export default function useLabelDocument({
         objectUrlsRef.current.set(el.id, src);
         dispatch({ type: "add", element: el });
         onElementAddedRef.current?.(el.id);
+        onImageFileAddedRef.current?.(el.id, file);
       };
       probe.src = src;
     },
@@ -108,6 +122,17 @@ export default function useLabelDocument({
 
   const updateElement = useCallback((element: LabelElement) => {
     dispatch({ type: "update", element });
+  }, []);
+
+  /** Remplace le contenu d'une image (résultat de détourage/gomme magique). */
+  const setImageBlob = useCallback((id: string, blob: Blob) => {
+    const src = URL.createObjectURL(blob);
+    const previous = objectUrlsRef.current.get(id);
+    objectUrlsRef.current.set(id, src);
+    dispatch({ type: "setSrc", id, src });
+    // Révoqué après le dispatch : l'ancien src peut encore être affiché
+    // une frame, on laisse le navigateur terminer son cycle de rendu.
+    if (previous) setTimeout(() => URL.revokeObjectURL(previous), 1000);
   }, []);
 
   const removeElement = useCallback((id: string) => {
@@ -127,5 +152,12 @@ export default function useLabelDocument({
     };
   }, []);
 
-  return { elements, addText, addImageFromFile, updateElement, removeElement };
+  return {
+    elements,
+    addText,
+    addImageFromFile,
+    updateElement,
+    setImageBlob,
+    removeElement,
+  };
 }
