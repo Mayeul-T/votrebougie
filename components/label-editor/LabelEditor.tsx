@@ -6,9 +6,15 @@ import useDebouncedExport from "./hooks/useDebouncedExport";
 import useDeleteKey from "./hooks/useDeleteKey";
 import useDisplayScale from "./hooks/useDisplayScale";
 import useLabelDocument from "./hooks/useLabelDocument";
+import MagicEraserPanel, { type EraserStatus } from "./MagicEraserPanel";
+import {
+  clickEraserSession,
+  createEraserSession,
+  deleteEraserSession,
+} from "./magicEraser";
 import TextEditOverlay from "./TextEditOverlay";
 import TextToolbox from "./TextToolbox";
-import type { TextElement } from "./types";
+import type { ImageElement, TextElement } from "./types";
 
 /** Résolution de travail de l'éditeur : 1 mm d'étiquette = 3 px de base. */
 const PX_PER_MM = 3;
@@ -45,6 +51,12 @@ export default function LabelEditor({
   // Bump quand une image finit de décoder : un export parti trop tôt
   // aurait figé un emplacement vide sur la bougie.
   const [imageTick, setImageTick] = useState(0);
+  // Sessions gomme magique par élément image (état UI : non sérialisé).
+  const [eraserSessions, setEraserSessions] = useState<
+    Record<string, { sessionId?: string; status: EraserStatus; busy: boolean }>
+  >({});
+  const eraserSessionsRef = useRef(eraserSessions);
+  eraserSessionsRef.current = eraserSessions;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -56,8 +68,65 @@ export default function LabelEditor({
 
   const displayScale = useDisplayScale(containerRef, baseWidth);
 
-  const { elements, addText, addImageFromFile, updateElement, removeElement } =
-    useLabelDocument({ baseWidth, baseHeight, onElementAdded: setSelectedId });
+  // Dès l'upload : détourage BiRefNet + encodage SAM côté serveur, puis le
+  // PNG détouré remplace l'original (la bougie se met à jour via l'export).
+  const handleImageFileAdded = useCallback((id: string, file: File) => {
+    setEraserSessions((prev) => ({
+      ...prev,
+      [id]: { status: "processing", busy: false },
+    }));
+    createEraserSession(file)
+      .then(({ sessionId, blob }) => {
+        // Élément supprimé pendant le détourage : on libère la session.
+        if (!eraserSessionsRef.current[id]) {
+          deleteEraserSession(sessionId);
+          return;
+        }
+        setImageBlobRef.current(id, blob);
+        setEraserSessions((prev) =>
+          prev[id]
+            ? { ...prev, [id]: { sessionId, status: "ready", busy: false } }
+            : prev,
+        );
+      })
+      .catch(() => {
+        setEraserSessions((prev) =>
+          prev[id] ? { ...prev, [id]: { status: "error", busy: false } } : prev,
+        );
+      });
+  }, []);
+
+  const {
+    elements,
+    addText,
+    addImageFromFile,
+    updateElement,
+    setImageBlob,
+    removeElement,
+  } = useLabelDocument({
+    baseWidth,
+    baseHeight,
+    onElementAdded: setSelectedId,
+    onImageFileAdded: handleImageFileAdded,
+  });
+  const setImageBlobRef = useRef(setImageBlob);
+  setImageBlobRef.current = setImageBlob;
+
+  const handleEraserClick = useCallback((id: string, x: number, y: number) => {
+    const entry = eraserSessionsRef.current[id];
+    if (!entry?.sessionId || entry.busy) return;
+    setEraserSessions((prev) => ({ ...prev, [id]: { ...entry, busy: true } }));
+    clickEraserSession(entry.sessionId, x, y)
+      .then((blob) => {
+        if (eraserSessionsRef.current[id]) setImageBlobRef.current(id, blob);
+      })
+      .catch(() => {})
+      .finally(() => {
+        setEraserSessions((prev) =>
+          prev[id] ? { ...prev, [id]: { ...prev[id], busy: false } } : prev,
+        );
+      });
+  }, []);
 
   useDebouncedExport({
     layerRef: contentLayerRef,
@@ -81,6 +150,9 @@ export default function LabelEditor({
 
   const removeSelected = useCallback(() => {
     if (!selectedId || editingId) return;
+    const session = eraserSessionsRef.current[selectedId];
+    if (session?.sessionId) deleteEraserSession(session.sessionId);
+    setEraserSessions(({ [selectedId]: _, ...rest }) => rest);
     removeElement(selectedId);
     setSelectedId(null);
   }, [selectedId, editingId, removeElement]);
@@ -96,6 +168,10 @@ export default function LabelEditor({
     );
   const editingEl = findTextEl(editingId);
   const selectedTextEl = findTextEl(selectedId);
+  // Image sélectionnée → l'éditeur « gomme magique » apparaît en grand.
+  const selectedImageEl = elements.find(
+    (el): el is ImageElement => el.id === selectedId && el.type === "image",
+  );
   // Nœud Konva du texte en édition, pour caler le textarea sur ses métriques.
   const editingNode = editingEl
     ? (stageRef.current?.findOne(`#${editingEl.id}`) as Konva.Text | undefined)
@@ -185,6 +261,15 @@ export default function LabelEditor({
           Étiquette {widthMm} × {heightMm} mm — double-cliquez un texte pour
           l'éditer.
         </p>
+
+        {selectedImageEl && (
+          <MagicEraserPanel
+            element={selectedImageEl}
+            status={eraserSessions[selectedImageEl.id]?.status ?? "unavailable"}
+            busy={eraserSessions[selectedImageEl.id]?.busy ?? false}
+            onClickPoint={(x, y) => handleEraserClick(selectedImageEl.id, x, y)}
+          />
+        )}
       </div>
     </div>
   );
